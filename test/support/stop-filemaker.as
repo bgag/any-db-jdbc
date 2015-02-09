@@ -1,0 +1,1 @@
+tell application "FileMaker Pro Advanced" to quit
