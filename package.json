@@ -1,6 +1,6 @@
 {
   "name": "any-db-jdbc",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "JDBC adapter for any-db",
   "main": "index.js",
   "scripts": {
