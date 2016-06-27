@@ -1,18 +1,36 @@
 {
   "name": "any-db-jdbc",
   "version": "0.0.1",
-  "description": "JDBC adapter für any-db",
+  "description": "JDBC adapter for any-db",
   "main": "index.js",
-  "directories": {
-    "test": "test"
-  },
   "scripts": {
-    "test": "mocha"
+    "lint": "standard",
+    "test": "npm run lint && npm run test-hsqldb",
+    "test-filemaker": "mocha -g filemaker",
+    "test-hsqldb": "mocha -g hsqldb"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:bgag/any-db-jdbc.git"
   },
   "keywords": [
     "jdbc",
     "any-db"
   ],
-  "author": "",
-  "license": "MIT"
+  "author": "Thomas Bergwinkl <bergi@axolotlfarm.org> (https://www.bergnet.org/people/bergi/card#me)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bgag/any-db-jdbc/issues"
+  },
+  "homepage": "https://github.com/bgag/any-db-jdbc",
+  "dependencies": {
+    "jdbc": "^0.3.1"
+  },
+  "devDependencies": {
+    "any-db": "^2.1.0",
+    "mocha": "^2.5.3",
+    "shelljs": "^0.7.0",
+    "standard": "^7.1.2"
+  },
+  "readmeFilename": "README.md"
 }

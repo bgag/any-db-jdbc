@@ -1,127 +1,155 @@
-/* global __dirname, after, before, describe */
+/* global after, before, cp, describe, exec, ln, it, rm, test */
 
-'use strict';
+'use strict'
 
+require('shelljs/global')
 
-var
-  anyDb = require('any-db'),
-  anyDbJdbc = require('any-db-jdbc'),
-  assert = require('assert'),
-  fs = require('fs'),
-  path = require('path'),
-  spawn = require('child_process').spawn;
-
+var anyDb = require('any-db')
+var anyDbJdbc = require('..')
+var assert = require('assert')
+var fs = require('fs')
+var path = require('path')
 
 var config = {
-  libpath: path.join(__dirname, '../drivers/fmjdbc.jar'),
+  libpath: 'drivers/fmjdbc.jar',
   drivername: 'com.filemaker.jdbc.Driver',
-  url: 'jdbc:filemaker://localhost/test',
-  user: 'Admin'
-};
-
+  uri: 'jdbc:filemaker://localhost/test',
+  user: 'Admin',
+  password: ''
+}
 
 describe('filemaker', function () {
-  var
-    connection;
-
-  this.timeout(10000);
+  this.timeout(11000)
 
   before(function (done) {
+    // create link so any-db can access the driver
+    if (!test('-L', 'node_modules/any-db-jdbc')) {
+      ln('-s', '..', 'node_modules/any-db-jdbc')
+    }
+
     // prepare database
-    fs.unlinkSync(path.join(__dirname, './support/test.fmp12'));
-    fs.writeFileSync(
-      path.join(__dirname, './support/test.fmp12'),
-      fs.readFileSync(path.join(__dirname, './support/test.org.fmp12'))
-    );
+    rm('test/support/test.fmp12')
+    cp('test/support/test.org.fmp12', 'test/support/test.fmp12')
 
-    // start FileMaker
-    spawn('osascript', ['test/support/start-filemaker.as']);
+    // start FileMaker ...
+    var startFilemakerAs = 'tell application "Finder"\n' +
+      '  open POSIX file "' + path.join(__dirname, 'support/test.fmp12') + '"\n' +
+      '  delay 5\n' +
+      'end tell\n'
 
-    // wait...
-    setTimeout(done, 9000);
-  });
+    if (test('-f', 'test/support/start-filemaker.as')) {
+      rm('test/support/start-filemaker.as')
+    }
 
-  after(function (done ) {
-    // stop FileMaker
-    spawn('osascript', ['test/support/stop-filemaker.as']);
+    fs.writeFileSync('test/support/start-filemaker.as', startFilemakerAs)
+    exec('osascript test/support/start-filemaker.as')
 
-    // wait...
-    setTimeout(done, 5000);
-  });
+    done()
+  })
+
+  after(function (done) {
+    setTimeout(function () {
+      // stop FileMaker ...
+      exec('osascript test/support/stop-filemaker.as')
+
+      done()
+    }, 1000)
+  })
 
   it('should register a configuration', function () {
-    anyDbJdbc.registerConfig(config);
-  });
+    anyDbJdbc.registerConfig(config)
+
+    assert.equal(Object.keys(anyDbJdbc.configs).length, 1)
+  })
 
   it('should establish a connection', function (done) {
-    connection = anyDb.createConnection(config.url, function (error) {
-      assert.equal(error, null);
+    var connection = anyDb.createConnection(config.url, function (err) {
+      assert.equal(err, null)
 
-      done();
-    });
-  });
+      connection.end(function () {
+        done()
+      })
+    })
+  })
 
-  it('should insert a row', function (done) {
-    connection.query('INSERT INTO test VALUES (1, \'test\')', function (error) {
-      assert.equal(error, null);
+  it('should close a connection', function (done) {
+    var connection = anyDb.createConnection(config.url, function () {
+      connection.end(function (err) {
+        assert.equal(err, null)
 
-      done();
-    });
-  });
+        done()
+      })
+    })
+  })
 
-  it('should select inserted row', function (done) {
-    connection.query('SELECT * FROM test', function (error, result) {
-      assert.deepEqual(result, {rows: [{ID: 1, TEXT: 'test'}] });
+  it('should run a update query', function (done) {
+    var connection = anyDb.createConnection(config.url, function () {
+      connection.query('INSERT INTO test VALUES (1, \'test\')', function (err) {
+        assert.equal(err, null)
 
-      done();
-    });
-  });
+        connection.end(function () {
+          done()
+        })
+      })
+    })
+  })
 
-  it('should update row', function (done) {
-    connection.query('UPDATE test SET TEXT = \'abc\' WHERE ID = 1', function (error) {
-      assert.equal(error, null);
+  it('should run a select query', function (done) {
+    var connection = anyDb.createConnection(config.url, function () {
+      connection.query('INSERT INTO test VALUES (2, \'test 2\')', function () {
+        connection.query('SELECT * FROM test WHERE ID=2', function (err, result) {
+          assert.equal(err, null)
+          assert.deepEqual(result, {rows: [{ID: 2, TEXT: 'test 2'}]})
 
-      done();
-    });
-  });
+          connection.end(function () {
+            done()
+          })
+        })
+      })
+    })
+  })
 
-  it('should select updated row', function (done) {
-    connection.query('SELECT * FROM test', function (error, result) {
-      assert.deepEqual(result, {rows: [{ID: 1, TEXT: 'abc'}] });
+  it('should support events for select query', function (done) {
+    var connection = anyDb.createConnection(config.url, function () {
+      connection.query('INSERT INTO test VALUES (3, \'test 3\')', function () {
+        connection.query('SELECT * FROM test WHERE ID=3').on('row', function (row) {
+          assert.deepEqual(row, {ID: 3, TEXT: 'test 3'})
 
-      done();
-    });
-  });
+          connection.end(function () {
+            done()
+          })
+        })
+      })
+    })
+  })
 
-  it('should support event based select', function (done) {
-    connection.query('SELECT * FROM test').on('row', function (row) {
-      assert.deepEqual(row, {ID: 1, TEXT: 'abc'});
+  it('should run a parameterized integer select query', function (done) {
+    var connection = anyDb.createConnection(config.url, function () {
+      connection.query('INSERT INTO test VALUES (4, \'test 4\')', function () {
+        connection.query('SELECT * FROM test WHERE ID = ?', [4], function (err, result) {
+          assert.equal(err, null)
+          assert.deepEqual(result, {rows: [{ID: 4, TEXT: 'test 4'}]})
 
-      done();
-    });
-  });
+          connection.end(function () {
+            done()
+          })
+        })
+      })
+    })
+  })
 
-  it('should support parameterized integer select', function (done) {
-    connection.query('SELECT * FROM test WHERE ID = $1', [1], function (error, result) {
-      assert.deepEqual(result, {rows: [{ID: 1, TEXT: 'abc'}] });
+  it('should run a parameterized string select query', function (done) {
+    var connection = anyDb.createConnection(config.url, function () {
+      connection.query('INSERT INTO test VALUES (5, \'test 5\')', function () {
+        connection.query('SELECT * FROM test WHERE TEXT = ?', ['test 5'], function (err, result) {
+          assert.equal(err, null)
+          assert.deepEqual(result, {rows: [{ID: 5, TEXT: 'test 5'}]})
 
-      done();
-    });
-  });
-
-  it('should support parameterized string select', function (done) {
-    connection.query('SELECT * FROM test WHERE TEXT = $1', ['abc'], function (error, result) {
-      assert.deepEqual(result, {rows: [{ID: 1, TEXT: 'abc'}] });
-
-      done();
-    });
-  });
-
-  it('should close connection', function (done) {
-    connection.end(function (error) {
-      assert.equal(error, null);
-
-      done();
-    });
-  });
-});
+          connection.end(function () {
+            done()
+          })
+        })
+      })
+    })
+  })
+})

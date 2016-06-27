@@ -1,1 +1,5 @@
-drivers
+.idea
+node_modules
+npm-debug.log
+test/support/start-filemaker.as
+test/support/test.fmp12
